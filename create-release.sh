@@ -132,7 +132,16 @@ for i in "${!EXECUTABLE_PATHS[@]}"; do
     file_path="${EXECUTABLE_PATHS[$i]}"
     release_name="${RELEASE_NAMES[$i]}"
     echo -e "${GREEN}Uploading $release_name...${NC}"
-    gh release upload "v${VERSION}" "$file_path#$release_name" --clobber
+    
+    # Create a temporary copy with the desired name
+    temp_file="/tmp/$release_name"
+    cp "$file_path" "$temp_file"
+    
+    # Upload the renamed file
+    gh release upload "v${VERSION}" "$temp_file" --clobber
+    
+    # Clean up temporary file
+    rm "$temp_file"
 done
 
 echo -e "${GREEN}✅ Release v${VERSION} created successfully!${NC}"
