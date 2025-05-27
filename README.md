@@ -19,6 +19,8 @@ Download the executable for your platform from the latest release or build the t
 ./picmrg -h
 ```
 
+> **IMPORTANT**: picmrg will consider all images called merge.png or merged-24-04-01.png and similar as it's own previously generated merges and **WILL OVERWRITE THEM**. Do not use picmrg on directories that contain images with these names or rename them.
+
 ### Directory Structure
 
 The tool expects a directory structure with groups of pictures in subdirectories:
