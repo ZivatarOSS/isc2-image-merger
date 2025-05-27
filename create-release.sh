@@ -136,4 +136,4 @@ for i in "${!EXECUTABLE_PATHS[@]}"; do
 done
 
 echo -e "${GREEN}✅ Release v${VERSION} created successfully!${NC}"
-echo -e "${GREEN}🔗 View the release at: $(gh repo view --web --json url -q .url)/releases/tag/v${VERSION}${NC}" 
+echo -e "${GREEN}🔗 View the release at: $(gh repo view --json url -q .url)/releases/tag/v${VERSION}${NC}" 
