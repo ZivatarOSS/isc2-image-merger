@@ -3,6 +3,18 @@
 # Build script for cross-platform compilation
 # This script builds for multiple targets using Docker for Linux builds
 
+# For Windows signing, install azuresigntool:
+# dotnet tool install --global AzureSignTool
+# and add to .env:
+# AZURE_KEY_VAULT_URL=https://your-key-vault-url
+# AZURE_CLIENT_ID=your-client-id
+# AZURE_CLIENT_SECRET=your-client-secret
+# AZURE_CERTIFICATE_NAME=your-certificate-name
+
+if [ -f .env ]; then
+    export $(cat .env | xargs)
+fi
+
 cd picmrg || exit 1
 
 echo "Building for multiple targets..."
@@ -19,6 +31,20 @@ else
     echo "Installing cross for Windows builds..."
     cargo install cross --git https://github.com/cross-rs/cross
     cross build --target x86_64-pc-windows-gnu --release
+fi
+
+if [ -n "$AZURE_KEY_VAULT_URL" ]; then
+    echo "Signing Windows executable..."
+    azuresigntool sign \
+        -kvu "$AZURE_KEY_VAULT_URL" \
+        -kvi "$AZURE_CLIENT_ID" \
+        -kvs "$AZURE_CLIENT_SECRET" \
+        -kvc "$AZURE_CERTIFICATE_NAME" \
+        -tr "http://timestamp.digicert.com" \
+        -td sha256 \
+        target/x86_64-pc-windows-gnu/release/picmrg.exe
+else
+    echo "Skipping signing Windows executable: not configured"
 fi
 
 # Build for Linux x86_64 using cross
