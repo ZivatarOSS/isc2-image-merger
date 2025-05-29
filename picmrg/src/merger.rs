@@ -260,4 +260,314 @@ fn resize_to_width(image: &DynamicImage, target_width: u32) -> DynamicImage {
     let target_height = (target_width as f32 * aspect_ratio) as u32;
     
     image.resize(target_width, target_height, image::imageops::FilterType::Lanczos3)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::test_utils::{setup_test_data_for_test, cleanup_test_data_for_test, generate_test_image};
+    use std::path::Path;
+    
+    #[test]
+    fn test_determine_merge_orientation() {
+        // Create test image infos
+        let vertical_images = vec![
+            ImageInfo {
+                image: generate_test_image(100, 200, [255, 0, 0]),
+                width: 100,
+                height: 200,
+                is_vertical: true,
+            },
+            ImageInfo {
+                image: generate_test_image(150, 300, [0, 255, 0]),
+                width: 150,
+                height: 300,
+                is_vertical: true,
+            },
+        ];
+        
+        let horizontal_images = vec![
+            ImageInfo {
+                image: generate_test_image(300, 150, [255, 0, 0]),
+                width: 300,
+                height: 150,
+                is_vertical: false,
+            },
+            ImageInfo {
+                image: generate_test_image(400, 200, [0, 255, 0]),
+                width: 400,
+                height: 200,
+                is_vertical: false,
+            },
+        ];
+        
+        let mixed_images = vec![
+            ImageInfo {
+                image: generate_test_image(100, 200, [255, 0, 0]),
+                width: 100,
+                height: 200,
+                is_vertical: true,
+            },
+            ImageInfo {
+                image: generate_test_image(300, 150, [0, 255, 0]),
+                width: 300,
+                height: 150,
+                is_vertical: false,
+            },
+            ImageInfo {
+                image: generate_test_image(200, 100, [0, 0, 255]),
+                width: 200,
+                height: 100,
+                is_vertical: false,
+            },
+        ];
+        
+        // Test majority vertical -> horizontal merge
+        assert!(matches!(determine_merge_orientation(&vertical_images), MergeOrientation::Horizontal));
+        
+        // Test majority horizontal -> vertical merge
+        assert!(matches!(determine_merge_orientation(&horizontal_images), MergeOrientation::Vertical));
+        
+        // Test mixed with majority horizontal -> vertical merge
+        assert!(matches!(determine_merge_orientation(&mixed_images), MergeOrientation::Vertical));
+    }
+    
+    #[test]
+    fn test_is_merged_file() {
+        // Test basic merged file
+        assert!(is_merged_file("merged.png"));
+        
+        // Test dated merged files
+        assert!(is_merged_file("merged-23-12-25.png"));
+        assert!(is_merged_file("merged-24-01-15.png"));
+        
+        // Test invalid patterns
+        assert!(!is_merged_file("merged.jpg"));
+        assert!(!is_merged_file("merged-2023-12-25.png"));
+        assert!(!is_merged_file("merged-23-1-25.png"));
+        assert!(!is_merged_file("other.png"));
+    }
+    
+    #[test]
+    fn test_load_image_info() {
+        let test_root = setup_test_data_for_test("load_info").expect("Failed to setup test data");
+        
+        // Test loading a vertical image
+        let vertical_path = Path::new(&test_root).join("vertical-images/red.png");
+        let vertical_info = load_image_info(&vertical_path).expect("Failed to load vertical image");
+        assert_eq!(vertical_info.width, 200);
+        assert_eq!(vertical_info.height, 400);
+        assert!(vertical_info.is_vertical);
+        
+        // Test loading a horizontal image
+        let horizontal_path = Path::new(&test_root).join("horizontal-images/yellow.png");
+        let horizontal_info = load_image_info(&horizontal_path).expect("Failed to load horizontal image");
+        assert_eq!(horizontal_info.width, 400);
+        assert_eq!(horizontal_info.height, 200);
+        assert!(!horizontal_info.is_vertical);
+        
+        // Test loading a square image
+        let square_path = Path::new(&test_root).join("mixed-images/gray.webp");
+        let square_info = load_image_info(&square_path).expect("Failed to load square image");
+        assert_eq!(square_info.width, 200);
+        assert_eq!(square_info.height, 200);
+        assert!(!square_info.is_vertical); // height == width, so not vertical
+        
+        cleanup_test_data_for_test(&test_root).expect("Failed to cleanup test data");
+    }
+    
+    #[test]
+    fn test_resize_to_height() {
+        let image = generate_test_image(100, 200, [255, 0, 0]);
+        
+        // Test resizing to same height (should return clone)
+        let same_height = resize_to_height(&image, 200);
+        assert_eq!(same_height.width(), 100);
+        assert_eq!(same_height.height(), 200);
+        
+        // Test resizing to different height (should maintain aspect ratio)
+        let resized = resize_to_height(&image, 400);
+        assert_eq!(resized.height(), 400);
+        // Aspect ratio: 100/200 = 0.5, so new width should be 400 * 0.5 = 200
+        assert_eq!(resized.width(), 200);
+    }
+    
+    #[test]
+    fn test_resize_to_width() {
+        let image = generate_test_image(200, 100, [0, 255, 0]);
+        
+        // Test resizing to same width (should return clone)
+        let same_width = resize_to_width(&image, 200);
+        assert_eq!(same_width.width(), 200);
+        assert_eq!(same_width.height(), 100);
+        
+        // Test resizing to different width (should maintain aspect ratio)
+        let resized = resize_to_width(&image, 400);
+        assert_eq!(resized.width(), 400);
+        // Aspect ratio: 100/200 = 0.5, so new height should be 400 * 0.5 = 200
+        assert_eq!(resized.height(), 200);
+    }
+    
+    #[test]
+    fn test_merge_horizontally() {
+        let image_infos = vec![
+            ImageInfo {
+                image: generate_test_image(100, 200, [255, 0, 0]), // Red
+                width: 100,
+                height: 200,
+                is_vertical: true,
+            },
+            ImageInfo {
+                image: generate_test_image(150, 300, [0, 255, 0]), // Green
+                width: 150,
+                height: 300,
+                is_vertical: true,
+            },
+        ];
+        
+        let merged = merge_horizontally(&image_infos).expect("Failed to merge horizontally");
+        
+        // Should use the tallest height (300) and sum up widths proportionally
+        assert_eq!(merged.height(), 300);
+        // First image: 100 * (300/200) = 150 width
+        // Second image: 150 * (300/300) = 150 width  
+        // Total: 150 + 150 = 300
+        assert_eq!(merged.width(), 300);
+    }
+    
+    #[test]
+    fn test_merge_vertically() {
+        let image_infos = vec![
+            ImageInfo {
+                image: generate_test_image(200, 100, [255, 0, 0]), // Red
+                width: 200,
+                height: 100,
+                is_vertical: false,
+            },
+            ImageInfo {
+                image: generate_test_image(300, 150, [0, 255, 0]), // Green
+                width: 300,
+                height: 150,
+                is_vertical: false,
+            },
+        ];
+        
+        let merged = merge_vertically(&image_infos).expect("Failed to merge vertically");
+        
+        // Should use the widest width (300) and sum up heights proportionally
+        assert_eq!(merged.width(), 300);
+        // First image: 100 * (300/200) = 150 height
+        // Second image: 150 * (300/300) = 150 height
+        // Total: 150 + 150 = 300
+        assert_eq!(merged.height(), 300);
+    }
+    
+    #[test]
+    fn test_merge_images_in_directory_single_image() {
+        let test_root = setup_test_data_for_test("single").expect("Failed to setup test data");
+        
+        let single_dir = Path::new(&test_root).join("single-image");
+        let image_files = vec![single_dir.join("orange.png")];
+        
+        let result = merge_images_in_directory(&single_dir, &image_files);
+        assert!(result.is_err());
+        assert!(result.unwrap_err().to_string().contains("Only one image file"));
+        
+        cleanup_test_data_for_test(&test_root).expect("Failed to cleanup test data");
+    }
+    
+    #[test]
+    fn test_merge_images_in_directory_no_images() {
+        let test_root = setup_test_data_for_test("merger_no_images").expect("Failed to setup test data");
+        
+        let empty_dir = Path::new(&test_root).join("empty-dir");
+        let image_files: Vec<PathBuf> = vec![];
+        
+        let result = merge_images_in_directory(&empty_dir, &image_files);
+        assert!(result.is_err());
+        assert!(result.unwrap_err().to_string().contains("No image files to merge"));
+        
+        cleanup_test_data_for_test(&test_root).expect("Failed to cleanup test data");
+    }
+    
+    #[test]
+    fn test_merge_images_in_directory_success() {
+        let test_root = setup_test_data_for_test("success").expect("Failed to setup test data");
+        
+        let vertical_dir = Path::new(&test_root).join("vertical-images");
+        let image_files = vec![
+            vertical_dir.join("red.png"),
+            vertical_dir.join("green.jpg"),
+            vertical_dir.join("blue.jpeg"),
+        ];
+        
+        // Remove any existing merged files first
+        let _ = remove_existing_merged_files(&vertical_dir);
+        
+        let result = merge_images_in_directory(&vertical_dir, &image_files);
+        assert!(result.is_ok(), "Failed to merge images: {:?}", result);
+        
+        // Check that a merged file was created
+        let merged_files: Vec<_> = std::fs::read_dir(&vertical_dir)
+            .expect("Failed to read directory")
+            .filter_map(|entry| {
+                let entry = entry.ok()?;
+                let name = entry.file_name().to_str()?.to_string();
+                if name.starts_with("merged-") && name.ends_with(".png") {
+                    Some(name)
+                } else {
+                    None
+                }
+            })
+            .collect();
+        
+        assert_eq!(merged_files.len(), 1, "Expected exactly one merged file");
+        
+        // Verify the merged file exists and is a valid image
+        let merged_path = vertical_dir.join(&merged_files[0]);
+        assert!(merged_path.exists());
+        let merged_image = image::open(&merged_path);
+        assert!(merged_image.is_ok(), "Merged file should be a valid image");
+        
+        cleanup_test_data_for_test(&test_root).expect("Failed to cleanup test data");
+    }
+    
+    #[test]
+    fn test_find_latest_creation_date() {
+        let test_root = setup_test_data_for_test("date").expect("Failed to setup test data");
+        
+        let image_files = vec![
+            Path::new(&test_root).join("vertical-images/red.png"),
+            Path::new(&test_root).join("vertical-images/green.jpg"),
+        ];
+        
+        let result = find_latest_creation_date(&image_files);
+        assert!(result.is_ok(), "Should find a valid date");
+        
+        cleanup_test_data_for_test(&test_root).expect("Failed to cleanup test data");
+    }
+    
+    #[test]
+    fn test_remove_existing_merged_files() {
+        let test_root = setup_test_data_for_test("remove").expect("Failed to setup test data");
+        
+        let test_dir = Path::new(&test_root).join("vertical-images");
+        
+        // Verify merged files exist initially
+        assert!(test_dir.join("merged.png").exists());
+        
+        // Remove merged files
+        let result = remove_existing_merged_files(&test_dir);
+        assert!(result.is_ok(), "Should successfully remove merged files");
+        
+        // Verify merged files are gone
+        assert!(!test_dir.join("merged.png").exists());
+        
+        // Verify regular image files still exist
+        assert!(test_dir.join("red.png").exists());
+        assert!(test_dir.join("green.jpg").exists());
+        assert!(test_dir.join("blue.jpeg").exists());
+        
+        cleanup_test_data_for_test(&test_root).expect("Failed to cleanup test data");
+    }
 } 

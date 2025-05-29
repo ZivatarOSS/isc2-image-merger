@@ -4,6 +4,8 @@ use std::io::Write;
 
 mod scanner;
 mod merger;
+#[cfg(test)]
+mod test_utils;
 
 fn main() {
     println!("picmrg v{}: image merger\n", env!("CARGO_PKG_VERSION"));
